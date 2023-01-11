@@ -151,12 +151,11 @@ func (r *GogoReconciler) createDeployment(m *hellov1.Gogo) *appsv1.Deployment {
 				},
 				Spec: corev1.PodSpec{
 					Containers: []corev1.Container{{
-						Image:   "memcached:1.4.36-alpine",
-						Name:    "memcached",
-						Command: []string{"memcached", "-m=64", "-o", "modern", "-v"},
+						Image: "quay.io/jkeam/hello-go@sha256:96bd61e4a98f06fb677f9e0ee30a48faa5c2de6c3f9ee967966c76dd549674c3",
+						Name:  "gogo",
 						Ports: []corev1.ContainerPort{{
-							ContainerPort: 11211,
-							Name:          "memcached",
+							ContainerPort: 8080,
+							Name:          "gogoport",
 						}},
 					}},
 				},
