@@ -1,0 +1,20 @@
+domain: jonkeam.com
+layout:
+- go.kubebuilder.io/v3
+plugins:
+  manifests.sdk.operatorframework.io/v2: {}
+  scorecard.sdk.operatorframework.io/v2: {}
+  sdk.x-openshift.io/v1: {}
+projectName: learning-go-operators
+repo: github.com/jkeam/learning-go-operators
+resources:
+- api:
+    crdVersion: v1
+    namespaced: true
+  controller: true
+  domain: jonkeam.com
+  group: hello
+  kind: Gogo
+  path: github.com/jkeam/learning-go-operators/api/v1
+  version: v1
+version: "3"

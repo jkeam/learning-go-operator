@@ -1,0 +1,6 @@
+apiVersion: hello.jonkeam.com/v1
+kind: Gogo
+metadata:
+  name: gogo-sample
+spec:
+  # TODO(user): Add fields here

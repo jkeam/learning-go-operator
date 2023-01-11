@@ -1,0 +1,51 @@
+apiVersion: operators.coreos.com/v1alpha1
+kind: ClusterServiceVersion
+metadata:
+  annotations:
+    alm-examples: '[]'
+    capabilities: Basic Install
+  name: learning-go-operators.v0.0.0
+  namespace: placeholder
+spec:
+  apiservicedefinitions: {}
+  customresourcedefinitions:
+    owned:
+    - description: Gogo is the Schema for the gogoes API
+      displayName: Gogo
+      kind: Gogo
+      name: gogos.hello.jonkeam.com
+      version: v1
+  description: Hello Golang App
+  displayName: Gogo
+  icon:
+  - base64data: ""
+    mediatype: ""
+  install:
+    spec:
+      deployments: null
+    strategy: ""
+  installModes:
+  - supported: false
+    type: OwnNamespace
+  - supported: false
+    type: SingleNamespace
+  - supported: false
+    type: MultiNamespace
+  - supported: true
+    type: AllNamespaces
+  keywords:
+  - learning
+  - awesome
+  - verycool
+  - jonkeam
+  links:
+  - name: Learning Go Operators
+    url: https://learning-go-operators.domain
+  maintainers:
+  - email: jkeam@redhat.com
+    name: Jon Keam
+  maturity: alpha
+  provider:
+    name: Jon Keam
+    url: jonkeam.com
+  version: 0.0.0
