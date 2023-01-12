@@ -28,8 +28,8 @@ type GogoSpec struct {
 	// INSERT ADDITIONAL SPEC FIELDS - desired state of cluster
 	// Important: Run "make" to regenerate code after modifying this file
 
-	// Foo is an example field of Gogo. Edit gogo_types.go to remove/update
-	Size int32 `json:"size"`
+	Size int32  `json:"size"`
+	Host string `json:"host"`
 }
 
 // GogoStatus defines the observed state of Gogo

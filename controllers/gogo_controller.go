@@ -23,10 +23,12 @@ import (
 
 	appsv1 "k8s.io/api/apps/v1"
 	corev1 "k8s.io/api/core/v1"
+	networkingv1 "k8s.io/api/networking/v1"
 	"k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/types"
+	utilv1 "k8s.io/apimachinery/pkg/util/intstr"
 	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/log"
@@ -43,18 +45,12 @@ type GogoReconciler struct {
 //+kubebuilder:rbac:groups=hello.jonkeam.com,resources=gogoes,verbs=get;list;watch;create;update;patch;delete
 //+kubebuilder:rbac:groups=hello.jonkeam.com,resources=gogoes/status,verbs=get;update;patch
 //+kubebuilder:rbac:groups=hello.jonkeam.com,resources=gogoes/finalizers,verbs=update
-// +kubebuilder:rbac:groups=apps,resources=deployments,verbs=get;list;watch;create;update;patch;delete
-// +kubebuilder:rbac:groups=core,resources=pods,verbs=get;list;
+//+kubebuilder:rbac:groups=apps,resources=deployments,verbs=get;list;watch;create;update;patch;delete
+//+kubebuilder:rbac:groups=core,resources=services,verbs=get;list;watch;create;update;patch;delete
+//+kubebuilder:rbac:groups=core,resources=pods,verbs=get;list;
+//+kubebuilder:rbac:groups=networking.k8s.io,resources=ingresses,verbs=get;list;watch;create;update;patch;delete
 
-// Reconcile is part of the main kubernetes reconciliation loop which aims to
-// move the current state of the cluster closer to the desired state.
-// TODO(user): Modify the Reconcile function to compare the state specified by
-// the Gogo object against the actual cluster state, and then
-// perform operations to make the cluster state reflect the state specified by
-// the user.
-//
-// For more details, check Reconcile and its Result here:
-// - https://pkg.go.dev/sigs.k8s.io/controller-runtime@v0.12.1/pkg/reconcile
+// Reconcile the main loop
 func (r *GogoReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctrl.Result, error) {
 	logger := log.FromContext(ctx)
 	logger.Info("Starting reconciliation")
@@ -84,6 +80,40 @@ func (r *GogoReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctrl.
 		return ctrl.Result{Requeue: true}, nil
 	} else if err != nil {
 		logger.Error(err, "Failed to get Gogo deployment")
+		return ctrl.Result{}, err
+	}
+
+	// service
+	foundService := &corev1.Service{}
+	err = r.Get(ctx, types.NamespacedName{Name: gogo.Name, Namespace: gogo.Namespace}, foundService)
+	if err != nil && errors.IsNotFound(err) && found != nil {
+		service := r.createService(gogo)
+		err = r.Create(ctx, service)
+		if err != nil {
+			logger.Error(err, fmt.Sprintf("Failed to create new Gogo service"))
+			return ctrl.Result{}, err
+		}
+		// Deployment created successfully - return and requeue
+		return ctrl.Result{Requeue: true}, nil
+	} else if err != nil {
+		logger.Error(err, "Failed to get Gogo service")
+		return ctrl.Result{}, err
+	}
+
+	// ingress
+	foundRoute := &networkingv1.Ingress{}
+	err = r.Get(ctx, types.NamespacedName{Name: gogo.Name, Namespace: gogo.Namespace}, foundRoute)
+	if err != nil && errors.IsNotFound(err) && found != nil && foundService != nil {
+		route := r.createIngress(gogo)
+		err = r.Create(ctx, route)
+		if err != nil {
+			logger.Error(err, fmt.Sprintf("Failed to create new Gogo route"))
+			return ctrl.Result{}, err
+		}
+		// Deployment created successfully - return and requeue
+		return ctrl.Result{Requeue: true}, nil
+	} else if err != nil {
+		logger.Error(err, "Failed to get Gogo route")
 		return ctrl.Result{}, err
 	}
 
@@ -128,9 +158,81 @@ func (r *GogoReconciler) SetupWithManager(mgr ctrl.Manager) error {
 	return ctrl.NewControllerManagedBy(mgr).
 		For(&hellov1.Gogo{}).
 		Owns(&appsv1.Deployment{}).
+		Owns(&corev1.Service{}).
+		Owns(&networkingv1.Ingress{}).
 		Complete(r)
 }
 
+// createIngress create ingress object
+func (r *GogoReconciler) createIngress(m *hellov1.Gogo) *networkingv1.Ingress {
+	ingressPathType := networkingv1.PathTypePrefix
+	ingressClassName := "openshift-default"
+	ingress := &networkingv1.Ingress{
+		TypeMeta: metav1.TypeMeta{
+			APIVersion: "networking.k8s.io/v1",
+			Kind:       "Ingress",
+		},
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      m.Name,
+			Namespace: m.Namespace,
+		},
+		Spec: networkingv1.IngressSpec{
+			IngressClassName: &ingressClassName,
+			Rules: []networkingv1.IngressRule{
+				{
+					Host: fmt.Sprintf("%s-%s.apps.%s", m.Name, m.Namespace, m.Spec.Host),
+					IngressRuleValue: networkingv1.IngressRuleValue{
+						HTTP: &networkingv1.HTTPIngressRuleValue{
+							Paths: []networkingv1.HTTPIngressPath{
+								{
+									Path:     "/",
+									PathType: &ingressPathType,
+									Backend: networkingv1.IngressBackend{
+										Service: &networkingv1.IngressServiceBackend{
+											Name: m.Name,
+											Port: networkingv1.ServiceBackendPort{
+												Number: 8080,
+											},
+										},
+									},
+								},
+							},
+						},
+					},
+				},
+			},
+		},
+	}
+
+	ctrl.SetControllerReference(m, ingress, r.Scheme)
+	return ingress
+}
+
+// createService create service
+func (r *GogoReconciler) createService(m *hellov1.Gogo) *corev1.Service {
+	service := &corev1.Service{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      m.Name,
+			Namespace: m.Namespace,
+		},
+		Spec: corev1.ServiceSpec{
+			Ports: []corev1.ServicePort{{
+				Port: 8080,
+				TargetPort: utilv1.IntOrString{
+					Type:   utilv1.Int,
+					IntVal: 8080,
+				},
+			}},
+			Selector: map[string]string{
+				"app": "gogo",
+			},
+		},
+	}
+	ctrl.SetControllerReference(m, service, r.Scheme)
+	return service
+}
+
+// createDeployment create a deployment object and register it
 func (r *GogoReconciler) createDeployment(m *hellov1.Gogo) *appsv1.Deployment {
 	ls := labelsForGogo(m.Name)
 	replicas := m.Spec.Size
@@ -155,14 +257,13 @@ func (r *GogoReconciler) createDeployment(m *hellov1.Gogo) *appsv1.Deployment {
 						Name:  "gogo",
 						Ports: []corev1.ContainerPort{{
 							ContainerPort: 8080,
-							Name:          "gogoport",
 						}},
 					}},
 				},
 			},
 		},
 	}
-	// Set Memcached instance as the owner and controller
+	// Set Gogo instance as the owner and controller
 	ctrl.SetControllerReference(m, dep, r.Scheme)
 	return dep
 }
